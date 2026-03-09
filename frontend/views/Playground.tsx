@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS: GenerationSettings = {
 
 export function Playground() {
   const { goHome } = useProjects()
-  const { forceApiGenerations, shouldVideoGenerateWithLtxApi } = useAppSettings()
+  const { forceApiGenerations, shouldVideoGenerateWithLtxApi, settings: appSettings, updateSettings } = useAppSettings()
   const [mode, setMode] = useState<GenerationMode>('text-to-video')
   const [prompt, setPrompt] = useState('')
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
@@ -47,8 +47,10 @@ export function Playground() {
 
   useEffect(() => {
     if (!shouldVideoGenerateWithLtxApi || mode === 'text-to-image') return
-    setSettings((prev) => sanitizeForcedApiVideoSettings({ ...prev, model: 'fast' }))
-  }, [mode, shouldVideoGenerateWithLtxApi])
+    // When user-chosen API mode (not forced), preserve the useApi flag so the model selector stays correct
+    const useApi = !forceApiGenerations && appSettings.hasLtxApiKey
+    setSettings((prev) => sanitizeForcedApiVideoSettings({ ...prev, model: 'fast', useApi }))
+  }, [appSettings.hasLtxApiKey, forceApiGenerations, mode, shouldVideoGenerateWithLtxApi])
 
   // Force pro model + resolution when audio is attached (A2V only supports pro @ 1080p 16:9)
   useEffect(() => {
@@ -257,10 +259,17 @@ export function Playground() {
             {!isRetakeMode && (
               <SettingsPanel
                 settings={settings}
-                onSettingsChange={setSettings}
+                onSettingsChange={(next) => {
+                  const willUseApi = next.useApi ?? false
+                  if (willUseApi !== (settings.useApi ?? false)) {
+                    updateSettings({ userPrefersLtxApiVideoGenerations: willUseApi })
+                  }
+                  setSettings(next)
+                }}
                 disabled={isBusy}
                 mode={mode}
-                forceApiGenerations={shouldVideoGenerateWithLtxApi}
+                forceApiGenerations={forceApiGenerations}
+                hasLtxApiKey={appSettings.hasLtxApiKey}
                 hasAudio={!!selectedAudio}
               />
             )}
@@ -284,6 +293,54 @@ export function Playground() {
                   </div>
                 ) : (
                   <span className="text-red-400">{generationError || retakeError}</span>
+                )}
+              </div>
+            )}
+
+            {/* Seed Control */}
+            {mode !== 'retake' && (
+              <div className="flex items-center gap-2 pt-3 border-t border-zinc-800">
+                <button
+                  onClick={() => updateSettings({ seedLocked: !appSettings.seedLocked })}
+                  title={appSettings.seedLocked ? 'Unlock seed (use random)' : 'Lock seed (use fixed value)'}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded text-xs transition-colors ${
+                    appSettings.seedLocked
+                      ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                      : 'bg-zinc-800 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700'
+                  }`}
+                >
+                  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                  </svg>
+                  Seed
+                </button>
+                {appSettings.seedLocked && (
+                  <>
+                    <input
+                      type="number"
+                      min="0"
+                      max="2147483647"
+                      value={appSettings.lockedSeed ?? 42}
+                      onChange={(e) => {
+                        const val = parseInt(e.target.value)
+                        if (!isNaN(val)) updateSettings({ lockedSeed: val })
+                      }}
+                      className="w-28 px-2 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                    <button
+                      onClick={() => updateSettings({ lockedSeed: Math.floor(Math.random() * 2147483647) })}
+                      title="Randomize seed"
+                      className="p-1.5 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 rounded transition-colors"
+                    >
+                      <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 2v6h-6M3 12a9 9 0 0 1 15-6.7L21 8M3 22v-6h6M21 12a9 9 0 0 1-15 6.7L3 16" />
+                      </svg>
+                    </button>
+                  </>
+                )}
+                {!appSettings.seedLocked && (
+                  <span className="text-xs text-zinc-600">random each run</span>
                 )}
               </div>
             )}

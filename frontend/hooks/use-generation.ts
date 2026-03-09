@@ -215,10 +215,18 @@ export function useGeneration(): UseGenerationReturn {
       const result = await response.json()
       
       if (result.status === 'complete' && result.video_path) {
-        // Convert Windows path to proper file:// URL
-        const videoPathNormalized = result.video_path.replace(/\\/g, '/')
-        const fileUrl = videoPathNormalized.startsWith('/') ? `file://${videoPathNormalized}` : `file:///${videoPathNormalized}`
-        
+        // In web mode the backend serves /outputs/<filename>; in Electron use file://
+        let fileUrl: string
+        if (result.video_url) {
+          // Backend provided an explicit URL (web mode)
+          fileUrl = result.video_url.startsWith('http')
+            ? result.video_url
+            : `${await window.electronAPI.getBackendUrl()}${result.video_url}`
+        } else {
+          const videoPathNormalized = result.video_path.replace(/\\/g, '/')
+          fileUrl = videoPathNormalized.startsWith('/') ? `file://${videoPathNormalized}` : `file:///${videoPathNormalized}`
+        }
+
         setState({
           isGenerating: false,
           progress: 100,

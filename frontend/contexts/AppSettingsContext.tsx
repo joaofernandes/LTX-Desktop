@@ -17,6 +17,7 @@ export interface AppSettings {
   hasFalApiKey: boolean
   hasGeminiApiKey: boolean
   useLocalTextEncoder: boolean
+  localEncoderVariant: 'standard' | 'gguf'
   fastModel: FastModelSettings
   proModel: InferenceSettings
   promptCacheSize: number
@@ -34,6 +35,7 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   hasFalApiKey: false,
   hasGeminiApiKey: false,
   useLocalTextEncoder: false,
+  localEncoderVariant: 'standard',
   fastModel: { useUpscaler: true },
   proModel: { steps: 20, useUpscaler: true },
   promptCacheSize: 1,
@@ -81,6 +83,7 @@ function normalizeAppSettings(data: Partial<AppSettings>): AppSettings {
     hasFalApiKey: data.hasFalApiKey ?? DEFAULT_APP_SETTINGS.hasFalApiKey,
     hasGeminiApiKey: data.hasGeminiApiKey ?? DEFAULT_APP_SETTINGS.hasGeminiApiKey,
     useLocalTextEncoder: data.useLocalTextEncoder ?? DEFAULT_APP_SETTINGS.useLocalTextEncoder,
+    localEncoderVariant: data.localEncoderVariant ?? DEFAULT_APP_SETTINGS.localEncoderVariant,
     fastModel: data.fastModel ?? DEFAULT_APP_SETTINGS.fastModel,
     proModel: data.proModel ?? DEFAULT_APP_SETTINGS.proModel,
     promptCacheSize: data.promptCacheSize ?? DEFAULT_APP_SETTINGS.promptCacheSize,

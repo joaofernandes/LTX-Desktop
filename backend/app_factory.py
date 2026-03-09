@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from _routes._errors import HTTPError
 from _routes.generation import router as generation_router
@@ -25,10 +28,16 @@ from state import init_state_service
 if TYPE_CHECKING:
     from app_handler import AppHandler
 
-DEFAULT_ALLOWED_ORIGINS: list[str] = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
+_web_mode = os.environ.get("LTX_USE_GGUF", "0") == "1" or os.environ.get("LTX_WEB_MODE", "0") == "1"
+
+DEFAULT_ALLOWED_ORIGINS: list[str] = (
+    ["*"]
+    if _web_mode
+    else [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
+)
 
 
 def create_app(
@@ -44,6 +53,7 @@ def create_app(
     app.add_middleware(
         CORSMiddleware,
         allow_origins=allowed_origins or DEFAULT_ALLOWED_ORIGINS,
+        allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -76,5 +86,15 @@ def create_app(
     app.include_router(retake_router)
     app.include_router(ic_lora_router)
     app.include_router(runtime_policy_router)
+
+    # In web mode, serve outputs and the built frontend SPA
+    if _web_mode:
+        outputs_dir = Path(__file__).parent / "outputs"
+        outputs_dir.mkdir(parents=True, exist_ok=True)
+        app.mount("/outputs", StaticFiles(directory=str(outputs_dir)), name="outputs")
+
+        frontend_dist = Path(__file__).parent.parent / "dist"
+        if frontend_dist.exists():
+            app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="frontend")
 
     return app

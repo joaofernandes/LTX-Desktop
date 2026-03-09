@@ -3,7 +3,7 @@
   "version": "1.0.1",
   "description": "LTX-2 Video Generation - Desktop App",
   "type": "module",
-  "main": "dist-electron/main.js",
+  "main": "dist-electron/main.cjs",
   "author": "Lightricks",
   "license": "Apache-2.0",
   "private": true,
@@ -26,6 +26,7 @@
     "prepare:python:mac": "bash scripts/prepare-python.sh",
     "prepare:python:win": "powershell -ExecutionPolicy Bypass -File scripts/prepare-python.ps1",
     "build:frontend": "vite build",
+    "build:web": "vite build --config vite.config.web.ts",
     "start:unpacked:mac": "open release/mac-arm64/LTX\\ Desktop.app",
     "start:unpacked:win": "powershell -Command \"& '.\\release\\win-unpacked\\LTX Desktop.exe'\""
   },

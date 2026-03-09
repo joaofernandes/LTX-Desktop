@@ -239,13 +239,13 @@ class ServiceBundle:
 
 def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
     """Build real runtime services with lazy heavy imports isolated from tests."""
-    from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
+    import os
+
     from services.zit_api_client.zit_api_client_impl import ZitAPIClientImpl
     from services.gpu_cleaner.torch_cleaner import TorchCleaner
     from services.gpu_info.gpu_info_impl import GpuInfoImpl
     from services.http_client.http_client_impl import HTTPClientImpl
     from services.ic_lora_model_downloader.ic_lora_model_downloader_impl import IcLoraModelDownloaderImpl
-    from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
     from services.ic_lora_pipeline.ltx_ic_lora_pipeline import LTXIcLoraPipeline
     from services.image_generation_pipeline.zit_image_generation_pipeline import ZitImageGenerationPipeline
     from services.ltx_api_client.ltx_api_client_impl import LTXAPIClientImpl
@@ -254,6 +254,18 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
     from services.task_runner.threading_runner import ThreadingRunner
     from services.text_encoder.ltx_text_encoder import LTXTextEncoder
     from services.video_processor.video_processor_impl import VideoProcessorImpl
+
+    use_gguf = os.environ.get("LTX_USE_GGUF", "0") == "1"
+
+    if use_gguf:
+        from services.gguf_pipeline_wrappers import LTXGGUFFastVideoPipeline, LTXGGUFa2vPipeline
+        fast_video_pipeline_class = LTXGGUFFastVideoPipeline
+        a2v_pipeline_class = LTXGGUFa2vPipeline
+    else:
+        from services.fast_video_pipeline.ltx_fast_video_pipeline import LTXFastVideoPipeline
+        from services.a2v_pipeline.ltx_a2v_pipeline import LTXa2vPipeline
+        fast_video_pipeline_class = LTXFastVideoPipeline
+        a2v_pipeline_class = LTXa2vPipeline
 
     http = HTTPClientImpl()
 
@@ -271,10 +283,10 @@ def build_default_service_bundle(config: RuntimeConfig) -> ServiceBundle:
         task_runner=ThreadingRunner(),
         ltx_api_client=LTXAPIClientImpl(http=http, ltx_api_base_url=config.ltx_api_base_url),
         zit_api_client=ZitAPIClientImpl(http=http),
-        fast_video_pipeline_class=LTXFastVideoPipeline,
+        fast_video_pipeline_class=fast_video_pipeline_class,
         image_generation_pipeline_class=ZitImageGenerationPipeline,
         ic_lora_pipeline_class=LTXIcLoraPipeline,
-        a2v_pipeline_class=LTXa2vPipeline,
+        a2v_pipeline_class=a2v_pipeline_class,
         retake_pipeline_class=LTXRetakePipeline,
         ic_lora_model_downloader=IcLoraModelDownloaderImpl(),
     )

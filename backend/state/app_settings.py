@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, TypeGuard, TypeVar, cast, get_args
 
 from pydantic import BaseModel, ConfigDict, Field, create_model, field_validator
@@ -152,7 +153,10 @@ def to_settings_response(settings: AppSettings) -> SettingsResponse:
     ltx_key = data.pop("ltx_api_key", "")
     fal_key = data.pop("fal_api_key", "")
     gemini_key = data.pop("gemini_api_key", "")
-    data["has_ltx_api_key"] = bool(ltx_key)
+    # In GGUF mode all processing is local — no LTX API key needed.
+    # Returning True here tells the frontend to skip the model-download gate.
+    gguf_mode = os.environ.get("LTX_USE_GGUF", "0") == "1"
+    data["has_ltx_api_key"] = gguf_mode or bool(ltx_key)
     data["has_fal_api_key"] = bool(fal_key)
     data["has_gemini_api_key"] = bool(gemini_key)
     return SettingsResponse.model_validate(data)

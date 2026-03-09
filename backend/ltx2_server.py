@@ -24,6 +24,14 @@ from datetime import datetime
 
 # Note: expandable_segments is not supported on all platforms
 
+# PyTorch MPS default cap is 0.833 × Metal's recommendedMaxWorkingSetSize (~31 GB on 48 GB
+# machines), which is too low for LTX generation. The LOW_WATERMARK_RATIO is hardcoded at
+# 1.4× recommended (~52 GB) and HIGH must be ≥ LOW, so we cannot set a 40 GB cap directly.
+# Setting HIGH=0.0 disables PyTorch's internal cap and lets macOS memory pressure management
+# handle allocation limits — safe on machines with sufficient RAM (≥ 36 GB).
+if sys.platform == "darwin" and "PYTORCH_MPS_HIGH_WATERMARK_RATIO" not in os.environ:
+    os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
+
 import torch
 from state.app_settings import AppSettings
 
@@ -63,6 +71,9 @@ if log_file is not None:
 logging.basicConfig(level=logging.INFO, handlers=handlers)
 logger = logging.getLogger(__name__)
 logger.info(f"Log file: {log_file}")
+
+if os.environ.get("PYTORCH_MPS_HIGH_WATERMARK_RATIO") == "0.0":
+    logger.info("MPS memory cap disabled (PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0) — macOS manages pressure")
 
 # ============================================================
 # SageAttention Integration
@@ -188,19 +199,22 @@ def _resolve_force_api_generations() -> bool:
     gpu_info = GpuInfoImpl()
     system = platform.system()
     cuda_available = gpu_info.get_cuda_available()
+    mps_available = gpu_info.get_mps_available()
     vram_gb = gpu_info.get_vram_total_gb()
 
     # Server-owned source of truth for mode selection.
     force_api_generations = decide_force_api_generations(
         system=system,
         cuda_available=cuda_available,
+        mps_available=mps_available,
         vram_gb=vram_gb,
     )
     logger.info(
-        "Runtime policy force_api_generations=%s (system=%s cuda_available=%s vram_gb=%s)",
+        "Runtime policy force_api_generations=%s (system=%s cuda_available=%s mps_available=%s vram_gb=%s)",
         force_api_generations,
         system,
         cuda_available,
+        mps_available,
         vram_gb,
     )
     return force_api_generations
@@ -291,4 +305,5 @@ if __name__ == "__main__":
     warmup_thread = threading.Thread(target=background_warmup, daemon=True)
     warmup_thread.start()
 
-    uvicorn.run(app, host="127.0.0.1", port=port, log_level="info", access_log=False)
+    host = os.environ.get("LTX_HOST", "127.0.0.1")
+    uvicorn.run(app, host=host, port=port, log_level="info", access_log=False)

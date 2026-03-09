@@ -460,7 +460,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                         <span className="text-sm font-medium text-white">Local Encoder</span>
                       </div>
                       <p className="text-xs text-zinc-400 mt-1">
-                        Run on your computer (~23 seconds). Requires 25 GB download.
+                        Run text encoding on your computer — no API key required.
                       </p>
                     </div>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -469,6 +469,46 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                       {settings.useLocalTextEncoder && <Check className="h-3 w-3 text-white" />}
                     </div>
                   </div>
+
+                  {/* Variant sub-options — show when Local Encoder is selected */}
+                  {settings.useLocalTextEncoder && (
+                    <div className="mt-3 pt-3 border-t border-zinc-700/50 space-y-2" onClick={(e) => e.stopPropagation()}>
+                      {/* Standard variant */}
+                      <div
+                        className={`flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                          settings.localEncoderVariant !== 'gguf' ? 'bg-zinc-700/60' : 'hover:bg-zinc-700/30'
+                        }`}
+                        onClick={() => updateSettings({ localEncoderVariant: 'standard' })}
+                      >
+                        <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                          settings.localEncoderVariant !== 'gguf' ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
+                        }`}>
+                          {settings.localEncoderVariant !== 'gguf' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-white">Standard (bfloat16)</p>
+                          <p className="text-xs text-zinc-400">Full precision · ~25 GB download · ~23 s/run</p>
+                        </div>
+                      </div>
+                      {/* GGUF / FP8 variant */}
+                      <div
+                        className={`flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                          settings.localEncoderVariant === 'gguf' ? 'bg-zinc-700/60' : 'hover:bg-zinc-700/30'
+                        }`}
+                        onClick={() => updateSettings({ localEncoderVariant: 'gguf' })}
+                      >
+                        <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                          settings.localEncoderVariant === 'gguf' ? 'border-emerald-500 bg-emerald-500' : 'border-zinc-600'
+                        }`}>
+                          {settings.localEncoderVariant === 'gguf' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                        </div>
+                        <div>
+                          <p className="text-xs font-medium text-white">GGUF Compact (FP8)</p>
+                          <p className="text-xs text-zinc-400">Lower memory · ~6 GB download · same quality</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Download Status - show when this option is selected */}
                   {settings.useLocalTextEncoder && (
@@ -487,7 +527,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                         <div className="space-y-2">
                           <div className="flex items-center gap-2 text-xs text-amber-400">
                             <AlertCircle className="h-4 w-4" />
-                            <span>Not downloaded ({textEncoderStatus?.expected_size_gb || 8} GB required)</span>
+                            <span>Not downloaded ({settings.localEncoderVariant === 'gguf' ? '~6' : (textEncoderStatus?.expected_size_gb || 25)} GB required)</span>
                           </div>
                           <Button
                             size="sm"
@@ -692,7 +732,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                       </label>
                     </div>
                     <p className="text-xs text-zinc-500 leading-relaxed">
-                      Share anonymous usage data to help improve LTX Desktop.
+                      Share anonymous usage data to help improve LTX Web.
                       Only basic technical information is collected — never personal data or generated content.
                     </p>
                   </div>
@@ -1144,7 +1184,7 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                 <div className="space-y-6">
                   {/* App Identity */}
                   <div className="text-center space-y-2">
-                    <h3 className="text-lg font-bold text-white">LTX Desktop</h3>
+                    <h3 className="text-lg font-bold text-white">LTX Web</h3>
                     <p className="text-sm text-zinc-400">Version {appVersion || '...'}</p>
                     <p className="text-xs text-zinc-500">AI-Powered Video Editor</p>
                   </div>

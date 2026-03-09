@@ -207,8 +207,13 @@ function AppContent() {
       return
     }
 
-    if (forceApiGenerations || setupState.needsLicense || setupState.needsSetup) {
+    if (forceApiGenerations || setupState.needsLicense || setupState.needsSetup || (isLoaded && settings.hasLtxApiKey)) {
       setRequiredModelsGate('ready')
+      return
+    }
+
+    // Don't proceed until settings are loaded — we need hasLtxApiKey to be accurate.
+    if (!isLoaded) {
       return
     }
 
@@ -237,6 +242,8 @@ function AppContent() {
     areRequiredModelsDownloaded,
     backendLoading,
     forceApiGenerations,
+    isLoaded,
+    settings.hasLtxApiKey,
     setupState,
     status.connected,
     waitingForRuntimePolicy,
@@ -364,7 +371,8 @@ function AppContent() {
     status.connected &&
     setupState !== 'loading' &&
     !waitingForRuntimePolicy &&
-    !forceApiGenerations
+    !forceApiGenerations &&
+    !(isLoaded && settings.hasLtxApiKey)
 
   if (backendLoading || setupState === 'loading' || waitingForRuntimePolicy || waitingForRequiredModels) {
     return (
@@ -372,7 +380,7 @@ function AppContent() {
         <div className="h-screen bg-background flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="h-12 w-12 text-primary animate-spin mx-auto mb-4" />
-            <h2 className="text-xl font-semibold text-foreground mb-2">Starting LTX Desktop...</h2>
+            <h2 className="text-xl font-semibold text-foreground mb-2">Starting LTX Web...</h2>
             <p className="text-muted-foreground">Initializing the inference engine</p>
           </div>
         </div>

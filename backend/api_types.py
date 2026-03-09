@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
 from typing import Literal, NamedTuple, TypeAlias, TypedDict
 from typing import Annotated
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 NonEmptyPrompt = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -180,6 +182,13 @@ class SuggestGapPromptResponse(BaseModel):
 class GenerateVideoResponse(BaseModel):
     status: str
     video_path: str | None = None
+    video_url: str | None = None  # Web-mode: relative URL served by /outputs/
+
+    @model_validator(mode="after")
+    def _set_video_url(self) -> "GenerateVideoResponse":
+        if self.video_url is None and self.video_path and os.environ.get("LTX_USE_GGUF", "0") == "1":
+            self.video_url = f"/outputs/{Path(self.video_path).name}"
+        return self
 
 
 class GenerateImageResponse(BaseModel):
