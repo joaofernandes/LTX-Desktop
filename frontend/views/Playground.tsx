@@ -42,8 +42,27 @@ export function Playground() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null)
   const [settings, setSettings] = useState<GenerationSettings>(() => ({ ...DEFAULT_SETTINGS }))
+  const [localEncoderDownloaded, setLocalEncoderDownloaded] = useState(false)
 
   const { status, processStatus } = useBackend()
+
+  // Poll text encoder download status so local model option appears once ready
+  useEffect(() => {
+    let cancelled = false
+    const check = async () => {
+      try {
+        const backendUrl = await window.electronAPI.getBackendUrl()
+        const res = await fetch(`${backendUrl}/api/models/status`)
+        if (res.ok) {
+          const data = await res.json() as { text_encoder_status?: { downloaded?: boolean } }
+          if (!cancelled) setLocalEncoderDownloaded(data.text_encoder_status?.downloaded ?? false)
+        }
+      } catch { /* ignore */ }
+    }
+    void check()
+    const interval = setInterval(() => { void check() }, 10_000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [])
 
   useEffect(() => {
     if (!shouldVideoGenerateWithLtxApi || mode === 'text-to-image') return
@@ -271,6 +290,7 @@ export function Playground() {
                 forceApiGenerations={forceApiGenerations}
                 hasLtxApiKey={appSettings.hasLtxApiKey}
                 hasAudio={!!selectedAudio}
+                localEncoderDownloaded={localEncoderDownloaded}
               />
             )}
 

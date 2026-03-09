@@ -9,6 +9,7 @@ import {
 
 export interface GenerationSettings {
   model: 'fast' | 'pro'
+  useApi?: boolean  // true = use LTX API for this generation (drives userPrefersLtxApiVideoGenerations)
   duration: number
   videoResolution: string
   fps: number
@@ -28,7 +29,9 @@ interface SettingsPanelProps {
   disabled?: boolean
   mode?: GenerationMode
   forceApiGenerations?: boolean
+  hasLtxApiKey?: boolean
   hasAudio?: boolean
+  localEncoderDownloaded?: boolean
 }
 
 export function SettingsPanel({
@@ -37,14 +40,18 @@ export function SettingsPanel({
   disabled,
   mode = 'text-to-video',
   forceApiGenerations = false,
+  hasLtxApiKey = false,
   hasAudio = false,
+  localEncoderDownloaded = false,
 }: SettingsPanelProps) {
   const isImageMode = mode === 'text-to-image'
   const LOCAL_MAX_DURATION: Record<string, number> = { '540p': 20, '720p': 10, '1080p': 5 }
+  // Treat user-selected API mode the same as forced API for constraints
+  const isApiMode = forceApiGenerations || (settings.useApi === true)
 
   const handleChange = (key: keyof GenerationSettings, value: string | number | boolean) => {
     const nextSettings = { ...settings, [key]: value } as GenerationSettings
-    if (forceApiGenerations && !isImageMode) {
+    if (isApiMode && !isImageMode) {
       onSettingsChange(sanitizeForcedApiVideoSettings(nextSettings, { hasAudio }))
       return
     }
@@ -61,13 +68,13 @@ export function SettingsPanel({
   }
 
   const localMaxDuration = LOCAL_MAX_DURATION[settings.videoResolution] ?? 20
-  const durationOptions = forceApiGenerations
+  const durationOptions = isApiMode
     ? [...getAllowedForcedApiDurations(settings.model, settings.videoResolution, settings.fps)]
     : [5, 6, 8, 10, 20].filter(d => d <= localMaxDuration)
-  const resolutionOptions = forceApiGenerations
+  const resolutionOptions = isApiMode
     ? (hasAudio ? ['1080p'] : [...FORCED_API_VIDEO_RESOLUTIONS])
     : ['1080p', '720p', '540p']
-  const fpsOptions = forceApiGenerations ? [...FORCED_API_VIDEO_FPS] : [24, 25, 50]
+  const fpsOptions = isApiMode ? [...FORCED_API_VIDEO_FPS] : [24, 25, 50]
 
   // Image mode settings
   if (isImageMode) {
@@ -108,14 +115,40 @@ export function SettingsPanel({
   return (
     <div className="space-y-4">
       {/* Model Selection */}
-      {!forceApiGenerations ? (
+      {!forceApiGenerations && hasLtxApiKey ? (
+        // Combined selector: API options + local option (only when encoder is ready)
+        <Select
+          label="Model"
+          value={settings.useApi ? settings.model + '_api' : 'fast'}
+          onChange={(e) => {
+            const v = e.target.value
+            const usesApi = v.endsWith('_api')
+            const model = v.replace('_api', '') as 'fast' | 'pro'
+            const next: GenerationSettings = { ...settings, model, useApi: usesApi }
+            if (usesApi && !isImageMode) {
+              onSettingsChange(sanitizeForcedApiVideoSettings(next, { hasAudio }))
+            } else {
+              onSettingsChange(next)
+            }
+          }}
+          disabled={disabled}
+        >
+          <option value="fast_api" disabled={hasAudio}>LTX-2.3 Fast (API)</option>
+          <option value="pro_api">LTX-2.3 Pro (API)</option>
+          {localEncoderDownloaded && <option value="fast">LTX 2.3 Local</option>}
+          {!localEncoderDownloaded && <option value="fast" disabled>LTX 2.3 Local (download in Settings)</option>}
+        </Select>
+      ) : !forceApiGenerations ? (
         <Select
           label="Model"
           value={settings.model}
           onChange={(e) => handleChange('model', e.target.value)}
           disabled={disabled}
         >
-          <option value="fast">LTX 2.3 Fast</option>
+          {localEncoderDownloaded
+            ? <option value="fast">LTX 2.3 Local</option>
+            : <option value="fast" disabled>LTX 2.3 Local (download in Settings)</option>
+          }
         </Select>
       ) : (
         <Select
