@@ -40,9 +40,11 @@ export function Playground() {
   const [mode, setMode] = useState<GenerationMode>('text-to-video')
   const [prompt, setPrompt] = useState('')
   const [selectedImage, setSelectedImage] = useState<string | null>(null)
+  const [selectedImageServerPath, setSelectedImageServerPath] = useState<string | null>(null)
   const [selectedAudio, setSelectedAudio] = useState<string | null>(null)
   const [settings, setSettings] = useState<GenerationSettings>(() => ({ ...DEFAULT_SETTINGS }))
-  const [localEncoderDownloaded, setLocalEncoderDownloaded] = useState(false)
+  const [standardEncoderDownloaded, setStandardEncoderDownloaded] = useState(false)
+  const [ggufEncoderDownloaded, setGgufEncoderDownloaded] = useState(false)
 
   const { status, processStatus } = useBackend()
 
@@ -54,8 +56,15 @@ export function Playground() {
         const backendUrl = await window.electronAPI.getBackendUrl()
         const res = await fetch(`${backendUrl}/api/models/status`)
         if (res.ok) {
-          const data = await res.json() as { text_encoder_status?: { downloaded?: boolean } }
-          if (!cancelled) setLocalEncoderDownloaded(data.text_encoder_status?.downloaded ?? false)
+          const data = await res.json() as {
+            text_encoder_standard_downloaded?: boolean
+            text_encoder_gguf_downloaded?: boolean
+            text_encoder_status?: { downloaded?: boolean }
+          }
+          if (!cancelled) {
+            setStandardEncoderDownloaded(data.text_encoder_standard_downloaded ?? data.text_encoder_status?.downloaded ?? false)
+            setGgufEncoderDownloaded(data.text_encoder_gguf_downloaded ?? false)
+          }
         }
       } catch { /* ignore */ }
     }
@@ -146,7 +155,8 @@ export function Playground() {
         : settings
       // Auto-detect: if image is loaded → I2V, otherwise → T2V
       if (!prompt.trim()) return
-      const imagePath = selectedImage ? fileUrlToPath(selectedImage) : null
+      // Web mode: use the server-side path returned by the upload endpoint; Electron: use file:// conversion
+      const imagePath = selectedImageServerPath ?? (selectedImage ? fileUrlToPath(selectedImage) : null)
       const audioPath = selectedAudio ? fileUrlToPath(selectedAudio) : null
       if (audioPath) effectiveVideoSettings.model = 'pro'
       generate(prompt, imagePath, effectiveVideoSettings, audioPath)
@@ -244,7 +254,8 @@ export function Playground() {
               <>
                 <ImageUploader
                   selectedImage={selectedImage}
-                  onImageSelect={setSelectedImage}
+                  onImageSelect={(path) => { setSelectedImage(path); if (!path) setSelectedImageServerPath(null) }}
+                  onServerPathAvailable={setSelectedImageServerPath}
                 />
                 <AudioUploader
                   selectedAudio={selectedAudio}
@@ -290,7 +301,10 @@ export function Playground() {
                 forceApiGenerations={forceApiGenerations}
                 hasLtxApiKey={appSettings.hasLtxApiKey}
                 hasAudio={!!selectedAudio}
-                localEncoderDownloaded={localEncoderDownloaded}
+                standardEncoderDownloaded={standardEncoderDownloaded}
+                ggufEncoderDownloaded={ggufEncoderDownloaded}
+                localEncoderVariant={appSettings.localEncoderVariant}
+                onLocalVariantChange={(v) => updateSettings({ localEncoderVariant: v })}
               />
             )}
 

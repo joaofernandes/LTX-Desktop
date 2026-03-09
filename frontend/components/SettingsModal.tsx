@@ -11,6 +11,12 @@ interface TextEncoderStatus {
   expected_size_gb: number
 }
 
+interface ModelsStatus {
+  text_encoder_status: TextEncoderStatus
+  text_encoder_standard_downloaded: boolean
+  text_encoder_gguf_downloaded: boolean
+}
+
 interface SettingsModalProps {
   isOpen: boolean
   onClose: () => void
@@ -30,8 +36,10 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
   const falApiKeyInputRef = useRef<HTMLInputElement>(null)
   const [geminiApiKeyInput, setGeminiApiKeyInput] = useState('')
   const geminiApiKeyInputRef = useRef<HTMLInputElement>(null)
-  const [textEncoderStatus, setTextEncoderStatus] = useState<TextEncoderStatus | null>(null)
-  const [isDownloading, setIsDownloading] = useState(false)
+  const [, setTextEncoderStatus] = useState<TextEncoderStatus | null>(null)
+  const [standardDownloaded, setStandardDownloaded] = useState(false)
+  const [ggufDownloaded, setGgufDownloaded] = useState(false)
+  const [isDownloadingVariant, setIsDownloadingVariant] = useState<'standard' | 'gguf' | null>(null)
   const [downloadError, setDownloadError] = useState<string | null>(null)
   const [appVersion, setAppVersion] = useState('')
   const [noticesText, setNoticesText] = useState<string | null>(null)
@@ -85,8 +93,10 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
         const backendUrl = await window.electronAPI.getBackendUrl()
         const response = await fetch(`${backendUrl}/api/models/status`)
         if (response.ok) {
-          const data = await response.json()
+          const data = await response.json() as ModelsStatus
           setTextEncoderStatus(data.text_encoder_status)
+          setStandardDownloaded(data.text_encoder_standard_downloaded ?? data.text_encoder_status?.downloaded ?? false)
+          setGgufDownloaded(data.text_encoder_gguf_downloaded ?? false)
         }
       } catch (e) {
         logger.error(`Failed to fetch text encoder status: ${e}`)
@@ -97,29 +107,34 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
     // Poll while downloading
     const interval = setInterval(fetchStatus, 2000)
     return () => clearInterval(interval)
-  }, [isOpen, isDownloading])
+  }, [isOpen, isDownloadingVariant])
 
-  // Handle text encoder download
-  const handleDownloadTextEncoder = async () => {
-    setIsDownloading(true)
+  // Handle text encoder download for a specific variant
+  const handleDownloadTextEncoder = async (variant: 'standard' | 'gguf') => {
+    setIsDownloadingVariant(variant)
     setDownloadError(null)
+    // Switch to the selected variant before downloading
+    updateSettings({ localEncoderVariant: variant })
     try {
       const backendUrl = await window.electronAPI.getBackendUrl()
       const response = await fetch(`${backendUrl}/api/text-encoder/download`, { method: 'POST' })
       const data = await response.json()
 
       if (data.status === 'already_downloaded') {
-        setTextEncoderStatus(prev => prev ? { ...prev, downloaded: true } : null)
+        if (variant === 'gguf') setGgufDownloaded(true)
+        else setStandardDownloaded(true)
       }
       // Poll for completion
       const pollInterval = setInterval(async () => {
         try {
           const statusRes = await fetch(`${backendUrl}/api/models/status`)
           if (statusRes.ok) {
-            const statusData = await statusRes.json()
+            const statusData = await statusRes.json() as ModelsStatus
             setTextEncoderStatus(statusData.text_encoder_status)
+            setStandardDownloaded(statusData.text_encoder_standard_downloaded ?? false)
+            setGgufDownloaded(statusData.text_encoder_gguf_downloaded ?? false)
             if (statusData.text_encoder_status?.downloaded) {
-              setIsDownloading(false)
+              setIsDownloadingVariant(null)
               clearInterval(pollInterval)
             }
           }
@@ -131,11 +146,11 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
       // Timeout after 30 minutes
       setTimeout(() => {
         clearInterval(pollInterval)
-        if (isDownloading) setIsDownloading(false)
+        setIsDownloadingVariant(null)
       }, 30 * 60 * 1000)
     } catch (e) {
       setDownloadError(e instanceof Error ? e.message : 'Download failed')
-      setIsDownloading(false)
+      setIsDownloadingVariant(null)
     }
   }
 
@@ -474,76 +489,54 @@ export function SettingsModal({ isOpen, onClose, initialTab }: SettingsModalProp
                   {settings.useLocalTextEncoder && (
                     <div className="mt-3 pt-3 border-t border-zinc-700/50 space-y-2" onClick={(e) => e.stopPropagation()}>
                       {/* Standard variant */}
-                      <div
-                        className={`flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors ${
-                          settings.localEncoderVariant !== 'gguf' ? 'bg-zinc-700/60' : 'hover:bg-zinc-700/30'
-                        }`}
-                        onClick={() => updateSettings({ localEncoderVariant: 'standard' })}
-                      >
-                        <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                          settings.localEncoderVariant !== 'gguf' ? 'border-blue-500 bg-blue-500' : 'border-zinc-600'
-                        }`}>
-                          {settings.localEncoderVariant !== 'gguf' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-white">Standard (bfloat16)</p>
-                          <p className="text-xs text-zinc-400">Full precision · ~25 GB download · ~23 s/run</p>
-                        </div>
-                      </div>
-                      {/* GGUF / FP8 variant */}
-                      <div
-                        className={`flex items-start gap-3 p-2 rounded-md cursor-pointer transition-colors ${
-                          settings.localEncoderVariant === 'gguf' ? 'bg-zinc-700/60' : 'hover:bg-zinc-700/30'
-                        }`}
-                        onClick={() => updateSettings({ localEncoderVariant: 'gguf' })}
-                      >
-                        <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
-                          settings.localEncoderVariant === 'gguf' ? 'border-emerald-500 bg-emerald-500' : 'border-zinc-600'
-                        }`}>
-                          {settings.localEncoderVariant === 'gguf' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
-                        </div>
-                        <div>
-                          <p className="text-xs font-medium text-white">GGUF Compact (FP8)</p>
-                          <p className="text-xs text-zinc-400">Lower memory · ~6 GB download · same quality</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Download Status - show when this option is selected */}
-                  {settings.useLocalTextEncoder && (
-                    <div className="mt-3 pt-3 border-t border-zinc-700/50">
-                      {textEncoderStatus?.downloaded ? (
-                        <div className="flex items-center gap-2 text-xs text-green-400">
-                          <Check className="h-4 w-4" />
-                          <span>Downloaded ({textEncoderStatus.size_gb} GB)</span>
-                        </div>
-                      ) : isDownloading ? (
-                        <div className="flex items-center gap-2 text-xs text-blue-400">
-                          <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                          <span>Downloading text encoder...</span>
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex items-center gap-2 text-xs text-amber-400">
-                            <AlertCircle className="h-4 w-4" />
-                            <span>Not downloaded ({settings.localEncoderVariant === 'gguf' ? '~6' : (textEncoderStatus?.expected_size_gb || 25)} GB required)</span>
+                      {[
+                        { key: 'standard' as const, label: 'Standard (bfloat16)', sub: 'Full precision · ~25 GB', downloaded: standardDownloaded, color: 'blue' },
+                        { key: 'gguf' as const, label: 'GGUF Compact (FP8)', sub: 'Lower memory · ~6 GB', downloaded: ggufDownloaded, color: 'emerald' },
+                      ].map(({ key, label, sub, downloaded, color }) => (
+                        <div
+                          key={key}
+                          className={`flex items-center gap-3 p-2 rounded-md cursor-pointer transition-colors ${
+                            settings.localEncoderVariant === key ? 'bg-zinc-700/60' : 'hover:bg-zinc-700/30'
+                          }`}
+                          onClick={() => updateSettings({ localEncoderVariant: key })}
+                        >
+                          <div className={`mt-0.5 w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${
+                            settings.localEncoderVariant === key
+                              ? `border-${color}-500 bg-${color}-500`
+                              : 'border-zinc-600'
+                          }`}>
+                            {settings.localEncoderVariant === key && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
-                          <Button
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleDownloadTextEncoder()
-                            }}
-                            className="w-full bg-blue-600 hover:bg-blue-500 text-white text-xs"
-                          >
-                            <Download className="h-3 w-3 mr-2" />
-                            Download Text Encoder
-                          </Button>
-                          {downloadError && (
-                            <p className="text-xs text-red-400">{downloadError}</p>
-                          )}
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-white">{label}</p>
+                            <p className="text-xs text-zinc-400">{sub}</p>
+                          </div>
+                          <div className="flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {downloaded ? (
+                              <span className="flex items-center gap-1 text-xs text-green-400">
+                                <Check className="h-3 w-3" /> Ready
+                              </span>
+                            ) : isDownloadingVariant === key ? (
+                              <span className="flex items-center gap-1 text-xs text-blue-400">
+                                <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                Downloading
+                              </span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleDownloadTextEncoder(key)}
+                                className="h-6 px-2 bg-blue-600 hover:bg-blue-500 text-white text-xs"
+                                disabled={isDownloadingVariant !== null}
+                              >
+                                <Download className="h-3 w-3 mr-1" />
+                                Download
+                              </Button>
+                            )}
+                          </div>
                         </div>
+                      ))}
+                      {downloadError && (
+                        <p className="text-xs text-red-400 mt-1">{downloadError}</p>
                       )}
                     </div>
                   )}

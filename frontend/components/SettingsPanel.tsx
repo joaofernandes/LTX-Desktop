@@ -31,7 +31,12 @@ interface SettingsPanelProps {
   forceApiGenerations?: boolean
   hasLtxApiKey?: boolean
   hasAudio?: boolean
+  /** @deprecated use standardEncoderDownloaded / ggufEncoderDownloaded */
   localEncoderDownloaded?: boolean
+  standardEncoderDownloaded?: boolean
+  ggufEncoderDownloaded?: boolean
+  localEncoderVariant?: 'standard' | 'gguf'
+  onLocalVariantChange?: (v: 'standard' | 'gguf') => void
 }
 
 export function SettingsPanel({
@@ -43,7 +48,14 @@ export function SettingsPanel({
   hasLtxApiKey = false,
   hasAudio = false,
   localEncoderDownloaded = false,
+  standardEncoderDownloaded,
+  ggufEncoderDownloaded,
+  localEncoderVariant = 'standard',
+  onLocalVariantChange,
 }: SettingsPanelProps) {
+  // Per-variant availability (fall back to legacy prop for backward compat)
+  const stdReady = standardEncoderDownloaded ?? localEncoderDownloaded
+  const ggufReady = ggufEncoderDownloaded ?? false
   const isImageMode = mode === 'text-to-image'
   const LOCAL_MAX_DURATION: Record<string, number> = { '540p': 20, '720p': 10, '1080p': 5 }
   // Treat user-selected API mode the same as forced API for constraints
@@ -116,39 +128,44 @@ export function SettingsPanel({
     <div className="space-y-4">
       {/* Model Selection */}
       {!forceApiGenerations && hasLtxApiKey ? (
-        // Combined selector: API options + local option (only when encoder is ready)
+        // Combined selector: API options + local options per downloaded variant
         <Select
           label="Model"
-          value={settings.useApi ? settings.model + '_api' : 'fast'}
+          value={settings.useApi ? settings.model + '_api' : ('fast_' + localEncoderVariant)}
           onChange={(e) => {
             const v = e.target.value
-            const usesApi = v.endsWith('_api')
-            const model = v.replace('_api', '') as 'fast' | 'pro'
-            const next: GenerationSettings = { ...settings, model, useApi: usesApi }
-            if (usesApi && !isImageMode) {
-              onSettingsChange(sanitizeForcedApiVideoSettings(next, { hasAudio }))
+            if (v.endsWith('_api')) {
+              const model = v.replace('_api', '') as 'fast' | 'pro'
+              const next: GenerationSettings = { ...settings, model, useApi: true }
+              onSettingsChange(isImageMode ? next : sanitizeForcedApiVideoSettings(next, { hasAudio }))
             } else {
-              onSettingsChange(next)
+              const variant = v === 'fast_gguf' ? 'gguf' : 'standard'
+              onLocalVariantChange?.(variant)
+              onSettingsChange({ ...settings, model: 'fast', useApi: false })
             }
           }}
           disabled={disabled}
         >
           <option value="fast_api" disabled={hasAudio}>LTX-2.3 Fast (API)</option>
           <option value="pro_api">LTX-2.3 Pro (API)</option>
-          {localEncoderDownloaded && <option value="fast">LTX 2.3 Local</option>}
-          {!localEncoderDownloaded && <option value="fast" disabled>LTX 2.3 Local (download in Settings)</option>}
+          {stdReady && <option value="fast_standard">LTX 2.3 Local Standard</option>}
+          {ggufReady && <option value="fast_gguf">LTX 2.3 Local GGUF</option>}
+          {!stdReady && !ggufReady && <option value="fast_standard" disabled>LTX 2.3 Local (download in Settings)</option>}
         </Select>
       ) : !forceApiGenerations ? (
         <Select
           label="Model"
-          value={settings.model}
-          onChange={(e) => handleChange('model', e.target.value)}
+          value={'fast_' + localEncoderVariant}
+          onChange={(e) => {
+            const variant = e.target.value === 'fast_gguf' ? 'gguf' : 'standard'
+            onLocalVariantChange?.(variant)
+            handleChange('model', 'fast')
+          }}
           disabled={disabled}
         >
-          {localEncoderDownloaded
-            ? <option value="fast">LTX 2.3 Local</option>
-            : <option value="fast" disabled>LTX 2.3 Local (download in Settings)</option>
-          }
+          {stdReady && <option value="fast_standard">LTX 2.3 Local Standard</option>}
+          {ggufReady && <option value="fast_gguf">LTX 2.3 Local GGUF</option>}
+          {!stdReady && !ggufReady && <option value="fast_standard" disabled>LTX 2.3 Local (download in Settings)</option>}
         </Select>
       ) : (
         <Select

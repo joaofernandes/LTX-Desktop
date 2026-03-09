@@ -6,27 +6,49 @@ import { cn } from '@/lib/utils'
 interface ImageUploaderProps {
   onImageSelect: (path: string | null) => void
   selectedImage: string | null
+  /** Called with the server-side absolute path once an uploaded file is saved (web mode only). */
+  onServerPathAvailable?: (serverPath: string | null) => void
 }
 
-export function ImageUploader({ onImageSelect, selectedImage }: ImageUploaderProps) {
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+export function ImageUploader({ onImageSelect, selectedImage, onServerPathAvailable }: ImageUploaderProps) {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
-    if (file) {
-      // In Electron, File objects have a .path property with the full filesystem path
-      const filePath = (file as any).path as string | undefined
-      if (filePath) {
-        const normalized = filePath.replace(/\\/g, '/')
-        const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
-        onImageSelect(fileUrl)
-      } else {
-        const url = URL.createObjectURL(file)
-        onImageSelect(url)
+    if (!file) return
+
+    // In Electron, File objects have a .path property with the full absolute filesystem path.
+    // Browsers expose only the basename (or empty string) — not a usable path.
+    const rawPath = (file as any).path as string | undefined
+    const isAbsolutePath = rawPath && (rawPath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(rawPath))
+
+    if (isAbsolutePath) {
+      // Electron: build a file:// URL from the absolute path
+      const normalized = rawPath.replace(/\\/g, '/')
+      const fileUrl = normalized.startsWith('/') ? `file://${normalized}` : `file:///${normalized}`
+      onImageSelect(fileUrl)
+    } else {
+      // Web mode: show blob URL immediately, then upload to backend for I2V access
+      const blobUrl = URL.createObjectURL(file)
+      onImageSelect(blobUrl)
+      onServerPathAvailable?.(null)
+      try {
+        const backendUrl = await window.electronAPI.getBackendUrl()
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await fetch(`${backendUrl}/api/inputs/upload`, { method: 'POST', body: formData })
+        if (res.ok) {
+          const data = await res.json() as { url: string; path: string }
+          // Replace blob URL with a stable server URL for display
+          onImageSelect(`${backendUrl}${data.url}`)
+          onServerPathAvailable?.(data.path)
+        }
+      } catch {
+        // Keep the blob URL for display; I2V will not work but at least image shows
       }
     }
-  }, [onImageSelect])
+  }, [onImageSelect, onServerPathAvailable])
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    onDrop,
+    onDrop: (files) => { void onDrop(files) },
     accept: {
       'image/png': ['.png'],
       'image/jpeg': ['.jpg', '.jpeg'],
@@ -50,6 +72,7 @@ export function ImageUploader({ onImageSelect, selectedImage }: ImageUploaderPro
   // Extract and truncate filename from path for display
   const getDisplayName = (path: string | null): string => {
     if (!path) return ''
+    if (path.startsWith('blob:')) return 'Uploading...'
     // Extract filename from path or URL
     const name = path.split(/[/\\]/).pop()?.replace(/^file:/, '') || path
     const decoded = decodeURIComponent(name)

@@ -1,0 +1,33 @@
+services:
+  ltx-backend:
+    build: .
+    image: ltx-desktop-backend:latest
+    ports:
+      - "8001:8001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      # Mount your model directory — models must match the paths below
+      - ${MODELS_DIR:-./models}:/models:ro
+      # Persistent app data (settings, outputs, uploaded inputs)
+      - ltx-app-data:/app-data
+    environment:
+      LTX_USE_GGUF: "1"
+      LTX_PORT: "8001"
+      LTX_HOST: "0.0.0.0"
+      LTX_APP_DATA_DIR: /app-data
+      # Paths inside the container (relative to the /models volume mount)
+      LTX_GGUF_CHECKPOINT_PATH: /models/transformer/ltx-2.3-22b-distilled-Q3_K_M.gguf
+      LTX_GGUF_VAE_PATH: /models/vae/ltx-2.3-distilled-video-vae.safetensors
+      LTX_GGUF_AUDIO_VAE_PATH: /models/vae/ltx-2.3-distilled-audio-vae.safetensors
+      LTX_GGUF_CONNECTOR_PATH: /models/text_encoders/ltx-2.3-distilled-connector.safetensors
+      LTX_GGUF_UPSAMPLER_PATH: /models/upscale_models/ltx-2-spatial-upscaler-x2-1.0.safetensors
+      LTX_GGUF_GEMMA_ROOT: /models/text_encoders/gemma-fp8
+
+volumes:
+  ltx-app-data:

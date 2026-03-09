@@ -147,6 +147,9 @@ class ModelsStatusResponse(BaseModel):
     has_api_key: bool
     text_encoder_status: TextEncoderStatus
     use_local_text_encoder: bool
+    # Per-variant encoder download status
+    text_encoder_standard_downloaded: bool = False
+    text_encoder_gguf_downloaded: bool = False
 
 
 class DownloadProgressResponse(BaseModel):

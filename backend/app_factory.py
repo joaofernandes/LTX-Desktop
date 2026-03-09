@@ -17,6 +17,7 @@ from _routes.generation import router as generation_router
 from _routes.health import router as health_router
 from _routes.ic_lora import router as ic_lora_router
 from _routes.image_gen import router as image_gen_router
+from _routes.inputs import router as inputs_router
 from _routes.models import router as models_router
 from _routes.suggest_gap_prompt import router as suggest_gap_prompt_router
 from _routes.retake import router as retake_router
@@ -86,12 +87,19 @@ def create_app(
     app.include_router(retake_router)
     app.include_router(ic_lora_router)
     app.include_router(runtime_policy_router)
+    app.include_router(inputs_router)
 
-    # In web mode, serve outputs and the built frontend SPA
+    # In web mode, serve outputs, inputs and the built frontend SPA
     if _web_mode:
-        outputs_dir = Path(__file__).parent / "outputs"
+        app_data_dir = Path(os.environ.get("LTX_APP_DATA_DIR", Path(__file__).parent))
+
+        outputs_dir = app_data_dir / "outputs"
         outputs_dir.mkdir(parents=True, exist_ok=True)
         app.mount("/outputs", StaticFiles(directory=str(outputs_dir)), name="outputs")
+
+        inputs_dir = app_data_dir / "input"
+        inputs_dir.mkdir(parents=True, exist_ok=True)
+        app.mount("/inputs", StaticFiles(directory=str(inputs_dir)), name="inputs")
 
         frontend_dist = Path(__file__).parent.parent / "dist"
         if frontend_dist.exists():
